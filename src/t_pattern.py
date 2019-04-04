@@ -36,6 +36,15 @@ _pattern = {
     'hulu': r'\bhulu\b',
     'voicemail': r'\b(voicemail|voice mail)\b',
     'visualvoice': r'\b(visualvoice|visual voice)\b',
+    'promotion': r'\b(promotion|promo)\b',
+    'buy': r'\bbuy',
+    'back': r'back\b',
+    'free': r'\bfree\b',
+    'preorder': r'\b(preorder|pre-order)\b',
+    'device': r'\bdevice\b',
+    'bogo': r'\bbogo\b',
+    'unlimited': r'\bunlimited\b',
+    'offer': r'\boffer\b'
 }
 
 _patterns = {
@@ -50,7 +59,17 @@ _patterns = {
         'monthly_reccuring': ['monthly','reccur'],
         'monthly_reccuring_charges': ['monthly','reccur','charge'],
         'price_plan': ['price','plan'],
-        'price_plan_charge': ['price_plan','charge']
+        'price_plan_charge': ['price_plan','charge'],
+        'unlimited': ['unlimited'],
+        'bogo_offer': ['bogo','offer'],
+        'promotion_offer': ['promotion','offer'],
+        'device_promotion': ['device','promotion'],
+        'free_promotion': ['free','promotion'],
+        'buy_back_promotion': ['buy','back','promotion'],
+        'buy_promotion': ['buy','promotion'],
+        'preorder_promotion': ['preorder','promotion'],
+        'plan': ['plan'],
+        'charge': ['charge']
     },
     'additional_service': {
         'amazon_prime': ['amazon','prime'],
@@ -64,7 +83,7 @@ _patterns = {
         'hulu': ['hulu'],
         'futo_tv': ['futotv'],
         'voice_mail': ['voicemail'],
-        'visual_voice': ['visualvoice'],
+        'visual_voice': ['visualvoice']
     }
 }
 
