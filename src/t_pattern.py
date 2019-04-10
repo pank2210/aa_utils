@@ -44,7 +44,17 @@ _pattern = {
     'device': r'\bdevice\b',
     'bogo': r'\bbogo\b',
     'unlimited': r'\bunlimited\b',
-    'offer': r'\boffer\b'
+    'lookout': r'\blookout\b',
+    'offer': r'\boffer\b',
+    'coverage': r'\bcoverage\b',
+    'signal': r'\bsignal\b',
+    'call': r'\bcall\b',
+    'network': r'\bnetwork\b',
+    'negate': r'\b(no|problem|issue|unavailable|troubleshoot|not working|bad|poor)\b',
+    'disconnect': r'\bdisconnect',
+    'frequent': r'\bfrequent',
+    'reception': r'\breception\b',
+    'drop': r'\bdrop'
 }
 
 _patterns = {
@@ -84,6 +94,16 @@ _patterns = {
         'futo_tv': ['futotv'],
         'voice_mail': ['voicemail'],
         'visual_voice': ['visualvoice']
+    },
+    'coverage_inquiry': {
+        'coverage': ['coverage'],
+        'signal': ['signal'],
+        'network': ['negate','network'],
+        'no_service': ['negate','service'],
+        'call_disconnect': ['call','disconnect'],
+        'frequent_disconnect': ['frequent','disconnect'],
+        'drop': ['drop'],
+        'no_reception': ['negate','reception']
     }
 }
 
@@ -108,7 +128,7 @@ class ResultSet:
     def __init__(self,id,ddir='../data/'):
         self._id = id
         self.resultset = {}
-        self.cols = ['id','m_pattern','m_sub_pattern']
+        self.cols = ['key','m_pattern','m_sub_pattern']
         self.ddir = ddir
         self.o_fl = 'm_pattern_' + id + '.csv'
 
@@ -214,7 +234,8 @@ class Pattern:
     def scan_df_for_pattern_match(self,sent_df):
         self.rs = ResultSet(id=self.id)
         for i,rec in sent_df.iterrows():
-            self.update_for_pattern_match(rec.id,rec.sent)
+            #print(rec.key,rec.doc_descr)
+            self.update_for_pattern_match(rec.key,rec.doc_descr)
         self.rs.print_resultset()
         
         return self.rs.get_resultset_as_df()
@@ -229,12 +250,15 @@ if __name__ == '__main__':
         'chrg2': 'what are details for hulu charges',
         'chrg3': 'what are different price plan for hotspot service charges',
         'vv1': 'cancel my visual voice',
-        'vv2': 'i want to activate visualvoice service'
+        'vv2': 'i want to activate visualvoice service',
+        'cai1': 'bad network',
+        'cai2': 'my call getting droped',
+        'cai3': 'i do not have signal at my office'
     }
     pat = Pattern(id='test1',default_match="other")
     #pat.test_pattern_dict(sent_dict=p_dict)
     #df = pat.scan_dict_for_pattern_match(sent_dict=p_dict)
-    i_df = pd.DataFrame(list(p_dict.items()),columns=['id','sent'])
+    i_df = pd.DataFrame(list(p_dict.items()),columns=['key','doc_descr'])
     df = pat.scan_df_for_pattern_match(sent_df=i_df)
     print(df.head(10))
 
