@@ -57,6 +57,12 @@ _pattern = {
     'drop': r'\bdrop'
 }
 
+_not_in_patterns = {
+    'bst': r'BST',
+    'spp': r'SPP',
+    'vmu': r'VMU'
+}
+
 _patterns = {
     'change_ptn': {
         'change_ptn': ['ptn','change'],
@@ -195,6 +201,24 @@ class Pattern:
 
     def update_for_pattern_match(self,s_key,sent):
         sent_dict = {}
+        not_in_flag = False
+
+        print("**s_key[%s] sent[%s] flag[%s] " % (s_key,sent,not_in_flag))
+        for negate_pattern in _not_in_patterns:
+            m = re.search( negate_pattern, sent, re.I)
+            #print("****s_key[%s] sent[%s] m[%s] pattern[%s]" % (s_key,sent,m,negate_pattern))
+            if m:
+                #even if one not_in_pattern match do not continue processing
+                not_in_flag = True
+                #create a default record to avoid this data classification 
+                self.rs.update_result( id=s_key,match_id=self.default_match,src_str=sent)
+                break
+            #print("****s_key[%s] sent[%s] flag[%s] pattern[%s]" % (s_key,sent,not_in_flag,negate_pattern))
+        
+        if not_in_flag:
+            #if not_in_pattern match then do no further processing.
+            return 
+
         for uc_key in _patterns:
             p_dict = _patterns[uc_key]
             for p_key in p_dict:
@@ -246,6 +270,7 @@ if __name__ == '__main__':
         'ptn1': 'change my number',
         'ptn2': 'i want number',
         'ptn3': 'i want new number',
+        'ptn4': 'i want new number for my bst phone',
         'chrg1': 'what are my monthly reccuring hulu charges',
         'chrg2': 'what are details for hulu charges',
         'chrg3': 'what are different price plan for hotspot service charges',

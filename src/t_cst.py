@@ -89,6 +89,7 @@ class CST:
         self.final_df['doc_descr'] = self.final_df.Document.str.extract('^(.*?);.*?$')
         self.final_df['doc_id'] = ''
         self.final_df['doc_id'] = self.final_df.Document.str.extract('^.*?\/DOC-(\d+)\?.*?$')
+        self.final_df.drop(columns=['Document'],inplace=True)
         pat = pattern.Pattern(id='test1',default_match="other")
         #print(self.final_df.dtypes)
         self.final_df.doc_descr.fillna('NA',inplace=True)
@@ -119,14 +120,14 @@ class CST:
                 #(tcwa_eng_df.transferred == True) & \
                 (self.final_df.m_pattern != 'other') \
                     ] \
-                .groupby(['m_pattern','m_sub_pattern']) \
-                ['doc_id'].nunique() \
-                .nlargest(50) \
-                .reset_index(name='nunique') \
-                .sort_values(['m_pattern','nunique'],ascending=[False,False])
+                .groupby(['doc_id','doc_descr','m_pattern','m_sub_pattern']) \
+                ['doc_id'].count() \
+                .nlargest(5000) \
+                .reset_index(name='count') \
+                .sort_values(['m_pattern','m_sub_pattern'],ascending=[False,False])
         #print(g_df.head())
-        g_df.to_csv( self.ddir + 'g_pattern_match_doc_count_' + self.o_fl, index=False)
-        print("Unique sub patterns count [%d]" % (self.final_df.USER_ELID.nunique()))
+        g_df.to_csv( self.ddir + 'g_docid_pattern_' + self.o_fl, index=False)
+        print("Unique sub patterns count [%d]" % (self.final_df.m_sub_pattern.nunique()))
         agent_id_df = self.final_df.USER_ELID.unique()
         out = csv.writer(open(self.ddir + 'agent_id_' + self.o_fl,"w"),delimiter=',')
         out.writerow(agent_id_df)

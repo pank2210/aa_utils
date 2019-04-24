@@ -65,7 +65,7 @@ class JiveCrawler:
     jdoc = None
     resp = requests.get( req_url, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
     if resp.status_code == 200:
-       print("Response received.")
+       #print("Response received.")
        jdoc = json.loads(resp.text)
        
     else:
@@ -123,7 +123,7 @@ class JiveCrawler:
 
     print("Processing get_parent_ids...")
     df = pd.read_csv( self.ddir + 'final_df1.csv', delimiter='|')
-    df = df[df.m_pattern != 'other'].head(100)
+    #df = df[df.m_pattern != 'other'].head(100)
     #print(df.doc_id.head())
     
     cnt = 0
@@ -140,7 +140,7 @@ class JiveCrawler:
           status_codes.append(val[1])
         else:
           #req_url = self.c_url % (rec.doc_id)
-          print("getting doc_id[%s]" % (rec.doc_id))
+          #print("getting doc_id[%s]" % (rec.doc_id))
           req_url1 = 'https://iconnect-test.sprint.com/api/core/v3/contents/?filter=entityDescriptor(102,%d)' % (rec.doc_id)
           #print(req_url1)
           resp = requests.get( req_url1, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
@@ -187,10 +187,10 @@ class JiveCrawler:
             (df.m_pattern != 'other') \
                 ] \
             .groupby(['space_id','m_pattern','m_sub_pattern']) \
-            ['EVENT_DT'].count() \
+            ['doc_id'].nunique() \
             .nlargest(100) \
-            .reset_index(name='count') \
-            .sort_values(['count'],ascending=False)
+            .reset_index(name='nunique') \
+            .sort_values(['nunique'],ascending=False)
     #print(g_df.head())
     g_df.to_csv( self.ddir + 'g_space_ids_df.csv', sep='|', index=False)
 
@@ -334,8 +334,6 @@ if __name__ == "__main__":
    jc = JiveCrawler(p_doc_id=[],c_doc_id_samples=[])
    #jc.get_doc_ids()
    placeSet=jc.get_parent_ids()
-   '''
    jc1 = JiveCrawler(p_doc_id=list(placeSet),c_doc_id_samples=['16297','11208','11209','11210','9935','19399'])
    jc1.crawl()
    jc1.generate_output()   
-   '''
