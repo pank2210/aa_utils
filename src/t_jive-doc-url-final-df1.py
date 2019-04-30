@@ -191,6 +191,7 @@ class JiveCrawler:
     print("[%d] rec's processed..." % (cnt))
     print("Status Codes [%s]" % (set(status_codes)))
     df.to_csv( self.ddir + 'p_doc_access_check_df.csv', sep='|', index=False)
+    df[(df.status_code != 200) & (df.status_code != 999)].to_csv( self.ddir + 'p_doc_access_check_error_df.csv', sep='|', index=False)
     g_df = df[ \
             #(df.status_code != 200) & \
             (df.m_pattern != 'other') \
