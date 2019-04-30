@@ -2,9 +2,12 @@
 import requests
 from requests.auth import HTTPBasicAuth
 
+import re
 import json
 import pandas as pd
 import csv
+
+import time_util as tu
 
 """from requests.utils import DEFAULT_CA_BUNDLE_PATH; print(DEFAULT_CA_BUNDLE_PATH)"""
 
@@ -22,6 +25,8 @@ class JiveCrawler:
     self.p_doc_id = p_doc_id  # use 1414 for Account Management - Care
     self.output_df_fl = 'space_all_df.csv'
     self.err_df_fl = 'space_err_df.csv'
+
+    self.mytk = tu.MyTimeKeeper()
      
     #col_names = ['id','name','subject','type','contentID','html_ref','Parent']
     self.col_names = ['id','name','subject','type','contentID','html_ref']
@@ -114,15 +119,108 @@ class JiveCrawler:
 
       return s
 
-  def get_parent_ids(self): 
+  def check_access_to_doc_ids(self,i_file): 
     jdoc = None
     #doc_ids=self.get_doc_ids()
     space_ids = []
     status_codes = []
     status_codes_dict = {}
+    _not_in_patterns = {
+        'bst': r'BST',
+        'spp': r'SPP',
+        'vmu': r'VMU'
+    }
 
-    print("Processing get_parent_ids...")
-    df = pd.read_csv( self.ddir + 'final_df1.csv', delimiter='|')
+    print("Processing check_access_to_doc_ids...")
+    df = pd.read_csv( self.ddir + i_file)
+    cols = ['m_pattern','m_sub_pattern','doc_id','doc_descr','usage','train_flag']
+    #print(df.columns)
+    df.columns = cols
+    print("Total docs [%d]" % (df.doc_id.count()))
+    print("Trainable Doc's [%d]" % (df[df.train_flag.isin(['Y','y'])].doc_id.count()))
+    df = df[df.train_flag.isin(['Y','y'])]
+    print("Total docs with train Flags [%d]" % (df.doc_id.count()))
+    #df = df[df.m_pattern != 'other'].head(100)
+    #print(df.doc_id.head())
+    
+    cnt = 0
+    jive_calls = 0
+    jive_calls_failed = 0
+    invoke_time = []
+    for i,rec in df.iterrows():
+      not_in_flag = False
+      for negate_pattern in _not_in_patterns:
+        m = re.search( negate_pattern, rec.doc_descr, re.I)
+        #print("****s_key[%s] sent[%s] m[%s] pattern[%s]" % (s_key,sent,m,negate_pattern))
+        if m:
+            #even if one not_in_pattern match do not continue processing
+            not_in_flag = True
+            break
+      
+      if not_in_flag:
+        #if not_in_pattern match then do no further processing.
+        #space_ids.append('00000')
+        status_codes.append(999)
+      else:
+        if rec.doc_id in status_codes_dict:
+          val = status_codes_dict[rec.doc_id]
+          #space_ids.append(val[0])
+          status_codes.append(val[1])
+        else:
+          #req_url = self.c_url % (rec.doc_id)
+          #print("getting doc_id[%s]" % (rec.doc_id))
+          req_url1 = 'https://iconnect-test.sprint.com/api/core/v3/contents/?filter=entityDescriptor(102,%d)' % (rec.doc_id)
+          #print(req_url1)
+          self.mytk.get_time_passed('inner')
+          resp = requests.get( req_url1, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
+          invoke_time.append(self.mytk.get_time_passed('inner'))
+          status_codes.append( resp.status_code)
+          jive_calls += 1
+          if resp.status_code != 200:
+            jive_calls_failed += 1
+          #space_ids.append('00000')
+          status_codes_dict[rec.doc_id] = [rec.doc_id,status_codes[-1]]
+      if cnt % 100 == 0:
+        print("processed[%d] jive_calls[%d] jive_calls_failed[%d] avg_time[%.2f]" % (cnt,jive_calls,jive_calls_failed,(sum(invoke_time)/jive_calls)))
+      cnt += 1
+      	
+    #df['space_id'] = space_ids
+    df['status_code'] = status_codes
+    print('Processed docs ',df.doc_id.count(),' status_codes count ',len(status_codes),' Jive calls ',jive_calls)
+
+    print("[%d] rec's processed..." % (cnt))
+    print("Status Codes [%s]" % (set(status_codes)))
+    df.to_csv( self.ddir + 'p_doc_access_check_df.csv', sep='|', index=False)
+    g_df = df[ \
+            #(df.status_code != 200) & \
+            (df.m_pattern != 'other') \
+                ] \
+            .groupby(['status_code']) \
+            ['doc_id'].nunique() \
+            .nlargest(1000) \
+            .reset_index(name='nunique') \
+            .sort_values(['nunique'],ascending=False)
+    print(g_df.head())
+    g_df.to_csv( self.ddir + 'g_access_check_sc.csv', sep='|', index=False)
+
+    return df[df.status_code != 200]
+ 
+  def get_parent_ids(self,i_file='final_df1.csv',i_df=None): 
+    jdoc = None
+    #doc_ids=self.get_doc_ids()
+    space_ids = []
+    status_codes = []
+    status_codes_dict = {}
+    df = None
+
+    if i_df:
+      print("Processing get_parent_ids from input dataframe param...")
+      df = i_df
+      #drop status_code as input will have it and output needs to generate one
+      df.drop('status_code',axis=1,inplace=True)
+    else:
+      print("Processing get_parent_ids from [%s]..." % (i_file))
+      df = pd.read_csv( self.ddir + i_file, delimiter='|')
     #df = df[df.m_pattern != 'other'].head(100)
     #print(df.doc_id.head())
     
@@ -333,7 +431,10 @@ if __name__ == "__main__":
    #Get parent IDs and name from document IDs
    jc = JiveCrawler(p_doc_id=[],c_doc_id_samples=[])
    #jc.get_doc_ids()
+   doc_df = jc.check_access_to_doc_ids('aa_jive_doc_list_review_phase1_0421.csv')
+   '''
    placeSet=jc.get_parent_ids()
    jc1 = JiveCrawler(p_doc_id=list(placeSet),c_doc_id_samples=['16297','11208','11209','11210','9935','19399'])
    jc1.crawl()
    jc1.generate_output()   
+   '''
