@@ -70,7 +70,7 @@ _patterns = {
         'area_code': ['area_code'],
         'new_number': ['number','new']
     },
-    'charge_inquiry': {
+    'charges_inquiry': {
         'monthly_charge': ['charge','monthly'],
         'monthly_reccuring': ['monthly','reccur'],
         'monthly_reccuring_charges': ['monthly','reccur','charge'],
@@ -87,7 +87,7 @@ _patterns = {
         'plan': ['plan'],
         'charge': ['charge']
     },
-    'additional_service': {
+    'feature_service_charges': {
         'amazon_prime': ['amazon','prime'],
         'tidal': ['tidal'],
         'family_locator': ['family','locator'],
