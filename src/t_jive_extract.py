@@ -38,7 +38,6 @@ class JiveCrawler:
     #Jive API access credentials. Normally user_id is service id made available from Jive
     self.userid = j_userid
     #self.pwd = j_pwd
-    self.pwd = 'A55ist!a6ent'
 
     #Preconfigure space_id used for pulling all child content. Has to be overrided by setter.
     self.p_doc_id = p_doc_id  # use 1414 for Account Management - Care
