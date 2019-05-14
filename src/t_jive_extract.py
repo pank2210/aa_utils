@@ -13,30 +13,56 @@ import time_util as tu
 
 class JiveCrawler:
   
-  def __init__(self,p_doc_id,c_doc_id_samples=None,ddir='../data/'):  
+  #Main contruxtor for JiveCrawler Ideally has predefined defaults configured for developer.
+  def __init__( self,
+                p_doc_id=[], \
+                c_doc_id_samples=None, \
+                j_userid='$ssagentassist', \
+                j_pwd = 'Ag3nt_A55ist', \
+                target_env='iconnect-test', \
+                ssl_cacert_path="C:\\Program Files\\Python36\\Lib\\site-packages\\certifi\\cacert.pem", \
+                ddir='../data/' \
+                ):  
     print("JiveCrawler initiated for p_doc_id[%s]" % (p_doc_id))
     self.ddir = ddir
-    self.verify = "C:\\Program Files\\Python36\\Lib\\site-packages\\certifi\\cacert.pem" 
-    self.c_url = 'https://iconnect-test.sprint.com/api/core/v3/contents/?filter=entityDescriptor(102,%s)'
-    #p_url = 'https://iconnect-test.sprint.com/api/core/v3/places/%s'
-    self.p_url = 'https://iconnect-test.sprint.com/api/core/v3/places/%s/contents'
-    self.userid = '$ssagentassist'
-    self.pwd = 'Ag3nt_A55ist'
-    self.p_doc_id = p_doc_id  # use 1414 for Account Management - Care
-    self.output_df_fl = 'space_all_df.csv'
-    self.err_df_fl = 'space_err_df.csv'
+    self.target_env = target_env
 
-    self.mytk = tu.MyTimeKeeper()
-     
+    #SSL Cert path. Changes as per local installation
+    self.verify =  ssl_cacert_path
+
+    #context URL's required for Jive API calls.
+    self.c_url = 'https://%s.sprint.com/api/core/v3/contents/?filter=entityDescriptor(102,%s)'
+    self.s_url = 'https://%s.sprint.com/api/core/v3/places/%s'
+    self.p_url = 'https://%s.sprint.com/api/core/v3/places/%s/contents'
+
+    #Jive API access credentials. Normally user_id is service id made available from Jive
+    self.userid = j_userid
+    #self.pwd = j_pwd
+
+    #Preconfigure space_id used for pulling all child content. Has to be overrided by setter.
+    self.p_doc_id = p_doc_id  # use 1414 for Account Management - Care
+
+    #Static output files for wrinting results.
+    self.output_df_fl = 'space_all_df.csv'
     #col_names = ['id','name','subject','type','contentID','html_ref','Parent']
     self.col_names = ['id','name','subject','type','contentID','html_ref']
-    self.err_col_names = ['space_id','http_response_code','url']
     self.df = pd.DataFrame(columns=self.col_names)
     self.df_dict = {}
+    for col in self.col_names: 
+      self.df_dict[col] = []
+
+    #A timer keeper utility. 
+    self.mytk = tu.MyTimeKeeper()
+     
+    #Initial parameter required for Error details collection and printing.
+    self.err_col_names = ['space_id','http_response_code','url']
+    self.err_df_fl = 'space_err_df.csv'
     self.err_df = pd.DataFrame(columns=self.err_col_names)
-
     self.err_df_dict = {}
+    for col in self.err_col_names: 
+      self.err_df_dict[col] = []
 
+    #Additional param kept for testing only where instead of pulling all Jive content only key documents and noise can be used.
     if c_doc_id_samples == None:
       self.c_doc_id_samples = []
     else:
@@ -44,12 +70,6 @@ class JiveCrawler:
     self.sample_size = .1
     self.random_seed = 1001
     
-    for col in self.col_names: 
-      self.df_dict[col] = []
-
-    for col in self.err_col_names: 
-      self.err_df_dict[col] = []
-
     #get place id for document urls
     self.output_df_fl1 = 'space_place_all_df_.csv'
     self.err_df_fl1 = 'space_place_err_df.csv'
@@ -60,12 +80,9 @@ class JiveCrawler:
     self.err_df1 = pd.DataFrame(columns=self.err_col_names1)
     self.df1 = pd.DataFrame(columns=self.col_names1)
 
-    for col in self.col_names1: 
-      self.df_dict1[col] = []
+  def set_p_doc_id(self,p_doc_id):  
+    self.p_doc_id = p_doc_id  # use ['1414'] for Account Management - Care
 
-    for col in self.err_col_names1: 
-      self.err_df_dict1[col] = []
-   
   def get_response(self,req_url): 
     jdoc = None
     resp = requests.get( req_url, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
@@ -81,7 +98,7 @@ class JiveCrawler:
 
   def get_place_id(self,space_id): 
     jdoc = None
-    req_url='https://iconnect-test.sprint.com/api/core/v3/places/?filter=entityDescriptor(14,'+space_id+')'
+    req_url='https://' + self.target_env + '.sprint.com/api/core/v3/places/?filter=entityDescriptor(14,'+space_id+')'
     resp = requests.get( req_url, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
     if resp.status_code == 200:
        #print("Response received.")
@@ -169,7 +186,7 @@ class JiveCrawler:
         else:
           #req_url = self.c_url % (rec.doc_id)
           #print("getting doc_id[%s]" % (rec.doc_id))
-          req_url1 = 'https://iconnect-test.sprint.com/api/core/v3/contents/?filter=entityDescriptor(102,%d)' % (rec.doc_id)
+          req_url1 = 'https://%s.sprint.com/api/core/v3/contents/?filter=entityDescriptor(102,%d)' % ( self.target_env, rec.doc_id)
           #print(req_url1)
           self.mytk.get_time_passed('inner')
           resp = requests.get( req_url1, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
@@ -209,8 +226,8 @@ class JiveCrawler:
 
   def get_placeids_from_spaceids(self,i_file='a9_jive_space_id_access_list_20190502.csv'): 
     jdoc = None
-    spaceids_url = 'https://iconnect.sprint.com/api/core/v3/places/%d'
-    placeids_url = 'https://iconnect.sprint.com/api/core/v3/places/%d/contents'
+    spaceids_url = self.s_url #'https://%s.sprint.com/api/core/v3/places/%d'
+    placeids_url = self.p_url #'https://%s.sprint.com/api/core/v3/places/%d/contents'
     #doc_ids=self.get_doc_ids()
     space_ids = []
     place_ids = []
@@ -235,7 +252,7 @@ class JiveCrawler:
         parent_urls.append('NA')
         continue
       else:
-        req_url1 = spaceids_url % (rec.space_id)
+        req_url1 = spaceids_url % (self.target_env,rec.space_id)
         resp = requests.get( req_url1, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
         status_codes.append( resp.status_code)
         jive_calls += 1
@@ -279,6 +296,82 @@ class JiveCrawler:
 
     return (set(space_ids)-{'00000'})
 
+  def process_spaces_with_appids(self,i_file='a9_jive_space_id_access_list_20190512.csv'): 
+    jdoc = None
+    spaceids_url = self.s_url #'https://%s.sprint.com/api/core/v3/places/%d'
+    placeids_url = self.p_url #'https://%s.sprint.com/api/core/v3/places/%d/contents'
+    space_ids = []
+    place_ids = []
+    parent_urls = []
+    status_codes = []
+    parent_urls_dict = {}
+    status_codes_dict = {}
+    placeids_dict = {}
+    df = None
+
+    print("Processing spaceids from [%s]..." % (i_file))
+    df = pd.read_csv( self.ddir + i_file,encoding="ISO-8859-1")
+    #df = df[(df.space_id == 2007) | (df.space_id == 2008)]
+    print(df.head())
+    
+    cnt = 0
+    jive_calls = 0
+    jive_calls_failed = 0
+    for i,rec in df.iterrows():
+      if rec.space_access != 'y':
+        status_codes.append(999)
+        parent_urls.append('NA')
+        continue
+      else:
+        req_url1 = spaceids_url % ( self.target_env, rec.space_appid)
+        resp = requests.get( req_url1, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
+        status_codes.append( resp.status_code)
+        jive_calls += 1
+        if resp.status_code == 200:
+            #print("Response header. [%s]" % (resp.headers))
+            #print("Response text. [%s]" % (resp.text))
+            jdoc = json.loads(resp.text)
+            #print(jdoc['list'][0]['parentPlace'])
+            if 'parent' in jdoc:
+                parent_url = jdoc['parent']
+            else:
+                parent_url = 'not found'
+            #print("****",item['uri'][52:])
+            parent_urls.append(parent_url)
+            space_ids.append(rec.space_appid)
+        else:
+            jive_calls_failed += 1
+            parent_urls.append('ERROR')
+            #print("Response to request url[%s] failed with status_code[%d]" % (rec.doc_id,resp.status_code))
+            #print(resp.headers)
+            #space_ids.append('00000')
+            #status_codes_dict[rec.doc_id] = [space_ids[-1],status_codes[-1]]
+      if cnt % 1000 == 0:
+        print("processed[%d] jive_calls[%d] jive_calls_failed[%d]" % (cnt,jive_calls,jive_calls_failed))
+      cnt += 1
+      	
+    #df['space_id'] = space_ids
+    df['status_code'] = status_codes
+    df['parent_url'] = parent_urls
+
+    print("[%d] rec's processed..." % (cnt))
+    print("[%d] space id's tested..." % (len(space_ids)))
+    print("Status Codes [%s]" % (set(status_codes)))
+    df.to_csv( self.ddir + 'a9_space_ids_upd.csv', sep=',', index=False)
+    g_df = df[ \
+            #(df.status_code != 200) & \
+            (df.space_access == 'y') \
+                ] \
+            .groupby(['status_code']) \
+            ['space_id'].count() \
+            .nlargest(1000) \
+            .reset_index(name='count') \
+            .sort_values(['count'],ascending=False)
+    print(g_df)
+    g_df.to_csv( self.ddir + 'a9_g_space_ids_sc.csv', sep='|', index=False)
+
+    return (set(space_ids))
+
   def get_parent_ids(self,i_file='final_df1.csv',i_df=None): 
     jdoc = None
     #doc_ids=self.get_doc_ids()
@@ -313,7 +406,7 @@ class JiveCrawler:
         else:
           #req_url = self.c_url % (rec.doc_id)
           #print("getting doc_id[%s]" % (rec.doc_id))
-          req_url1 = 'https://iconnect-test.sprint.com/api/core/v3/contents/?filter=entityDescriptor(102,%d)' % (rec.doc_id)
+          req_url1 = self.c_url % (self.target_env,rec.doc_id)
           #print(req_url1)
           resp = requests.get( req_url1, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
           status_codes.append( resp.status_code)
@@ -417,7 +510,7 @@ class JiveCrawler:
   def crawl_url(self,doc_id,next_link=True): 
     url = self.p_url
 
-    req_url = url % (doc_id)     
+    req_url = url % (self.target_env,doc_id)     
     #print("Parent doc_id[%s], connecting to url[%s] for crawl..." % (doc_id,req_url)) 
     #print("Crawling parent doc_id[%s]..." % (doc_id)) 
     status_code,jdoc = self.get_response(req_url)
@@ -492,25 +585,14 @@ class JiveCrawler:
 #print(data["list"] [0]["content"] ["text"])
 if __name__ == "__main__":
    print("Main started....")
-   #Find the document ids from space list. fetch placeId from spaceId and then document IDs.
-   #jc1=JiveCrawler(p_doc_id=[])
-   #space_list=['2166','2007']
-   #space_list=['2166','2007','2019','2049','2050','2332','2499','2364','2338','2053','2500','2346','2336','2231','2844','3024','2008','2024','2190','2198','2413','2195','2414','2196','2415','2200','2416','2201','2417','2204','2202','2418','2203','2419','2977','2205','2420','2388','2421','2399','2491','2767','2770','2769','2772','2765','2858','2766','2782','2817','2842','2850','2859','2864','2898','2924','2934','2984','2985','2998','3016','2236','2189','2623','2652','2653','2655','2808','2975','2639','2641','2642','2643','2645','2948','2661','2809','2962','3005','2010','2386','2539','2366','2540'
-#]
-   #place_list=jc1.crawl_place_id(space_list)
-  #Find the document ids from from place list.
-   #jc = JiveCrawler(p_doc_id=place_list,c_doc_id_samples=['16297','11208','11209','11210','9935','19399'])
-   #jc.crawl()
-   #jc.generate_output()
-   #Get parent IDs and name from document IDs
-   jc = JiveCrawler(p_doc_id=[],c_doc_id_samples=[])
-   jc.get_placeids_from_spaceids()
-   #jc.get_doc_ids()
+
+   jc = JiveCrawler(target_env='iconnect')
+   #jc.get_placeids_from_spaceids()
+   placeSet = jc.process_spaces_with_appids()
+   #print(placeSet)
    #doc_df = jc.check_access_to_doc_ids('aa_jive_doc_list_review_phase1_0421.csv')
-   #'''
    #placeSet=jc.get_parent_ids()
-   #jc1 = JiveCrawler(p_doc_id=['5630','2007','2008'])
-   #jc1 = JiveCrawler(p_doc_id=list(placeSet),c_doc_id_samples=['16297','11208','11209','11210','9935','19399'])
-   #jc1.crawl()
-   #jc1.generate_output()   
-   #'''
+   #jc.set_p_doc_id(p_doc_id=['4781','13317','13404'])
+   jc.set_p_doc_id(p_doc_id=list(placeSet))
+   jc.crawl(next_link=True)
+   jc.generate_output()
