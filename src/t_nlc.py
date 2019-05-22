@@ -1,60 +1,167 @@
 import json
-from watson_developer_cloud import NaturalLanguageUnderstandingV1
-from watson_developer_cloud.natural_language_understanding_v1 import Features, CategoriesOptions, EntitiesOptions, ConceptsOptions,KeywordsOptions, SemanticRolesOptions
+from ibm_watson import AssistantV1
+from ibm_watson import ApiException
+
+import pandas as pd
+
+import time_util as tu
 
 api_cred = {
-  "apikey": "1IJHzX6xD3nSceULZuGwC_4wFZ0XqFL5euEiyknVE_dJ",
-  "iam_apikey_description": "Auto-generated for key dc4cf0f7-8bcd-4acc-8540-5dad9257d402",
-  "iam_apikey_name": "Auto-generated service credentials",
-  "iam_role_crn": "crn:v1:bluemix:public:iam::::serviceRole:Manager",
-  "iam_serviceid_crn": "crn:v1:bluemix:public:iam-identity::a/0440feb8201146deaab3d0f37b89fba8::serviceid:ServiceId-84ee690f-0727-4601-9044-d13391e5109a",
-  "url": "https://gateway.watsonplatform.net/natural-language-understanding/api"
+  "url": "https://gateway.watsonplatform.net/assistant/api",
+  #Agent assist service related directory properties
+  "workspace_id": "eb813b78-2c5f-4ac0-aedf-779e140fc463",
+  "version": "2018-10-15",
+  "username": "apikey",
+  "password": "eiFjCV0ln3ECj4zma6Ji9OUveZZJ5dDxkPOr_Bpm3YS4"
 }
 
-class NLU:
+class NLC:
   def log(self,fname,level=2,str=''):
     if level <= self.debug_level:
        print( "[%s::%s]|[%s]" %(self.cname,fname,str))
   
-  def __init__(self,cred=None):
+  def __init__(self,cred=None,ddir='../data/'):
     self.debug_level = 2
-    self.cname = 'NLU'
+    self.ddir = ddir
+    self.cname = 'NLC'
     fname = '__init__'
-    
+    #A timer keeper utility. 
+    self.mytk = tu.MyTimeKeeper()
+         
     self.log(fname,2,' call entry')
-    self.natural_language_understanding = NaturalLanguageUnderstandingV1( \
-            version='2018-11-16', \
-            iam_apikey = api_cred['apikey'], \
+    self.o_fd = open( self.ddir + "assistant.out",'a')
+
+    self.assistant = AssistantV1( \
+            version = api_cred['version'], \
+            username = api_cred['username'], \
+            password = api_cred['password'], \
             url = api_cred['url'] \
-         ) \
-    
-  
+         )
+    '''
+    self.session_id = self.assistant.create_session( \
+                          assistant_id=api_cred['workspace_id'] \
+                        ).get_result()
+    '''
+
+  def get_top_intent(self,resp_obj):
+    fname = 'get_top_intent'
+    ignore_intents = ['churn','chitchat']
+    top_intent = None
+
+    #self.log( fname, 2, 'call entry')
+    intents = resp_obj['intents']
+
+    for i,rec in enumerate(intents):
+      '''
+      print(rec['intent'])
+      for k,v in rec.items():
+        print("k[%s] v[%s]" % (k,v))
+      '''
+      if rec['intent'] in ignore_intents:
+        continue
+      else:
+        top_intent = rec['intent']
+        break
+      
+    return top_intent
+      
   def invoke( self, i_text):
     fname = 'invoke'
+    error_flag = False
+    response = None
+     
+    #self.log(fname,2,' call entry')
+    try:
+      response = self.assistant.message( \
+                    #session_id = self.session_id, \
+                    workspace_id=api_cred['workspace_id'], \
+                    input={ \
+                        'text': i_text \
+                    } \
+                ).get_result()
+    except ApiException as ex:
+      self.log(fname,2,"API Failed for text[" + str(i_text) + "] status code [" + str(ex.code) + "] : message[" + str(ex.message) + "]")
+      #self.log(fname,2,"API Failed for text[" + i_text + "] message[" + ex.message + "]")
+
+    if response:
+      resp_obj = json.dumps(response, indent=2)
+      top_intent = self.get_top_intent(response)
+    else:
+      top_intent = 'INTENT_API_ERROR'
+
+    #self.log(fname,1,top_intent)
+    self.o_fd.write("%s|%s\n" % (i_text,top_intent))
+    #self.o_fd.close()
+    
+    return top_intent
+
+  def batch_invoke( self, i_file, key='id', value='subject', rec_del='|'):
+    fname = 'batch_invoke'
      
     self.log(fname,2,' call entry')
-    response = self.natural_language_understanding.analyze( \
-         text = i_text,
-         features=Features(
-                              #categories=CategoriesOptions(limit=3), \
-                              #concepts=ConceptsOptions(limit=5), \
-                              #keywords=KeywordsOptions(limit=10), \
-                              #semantic_roles=SemanticRolesOptions(limit=3), \
-                              entities=EntitiesOptions(limit=249) \
-                            ) \
-       ).get_result()
+
+    df = pd.read_csv( self.ddir + i_file, delimiter='|')
+    df = df.head(50)
+    #print(df.columns)
+
+    cnt = 0
+    skip_cnt = 500
+    intents = []
+    invoke_time = []
+    self.mytk.get_time_passed('outer')
+    key_dict = {}
+    for i,rec in df.iterrows():
+      '''
+      if cnt < skip_cnt:
+        cnt += 1
+        continue
+      '''
+      #check if key already processed
+      if rec[key] in key_dict:
+        intents.append(key_dict[rec[key]])
+        print("**duplicate rec [%s]" %(rec[key]))
+        continue 
+      else:
+        self.mytk.get_time_passed('inner')
+        intent = self.invoke(rec[value])
+        invoke_time.append(self.mytk.get_time_passed('inner'))
+        key_dict[rec[key]] = intent
+        intents.append(intent)
+        cnt += 1
+        if cnt % 100 == 0:
+          print("processed[%d] avg_time[%.2f]" % (cnt,(sum(invoke_time)/cnt)))
+
+    df['intent'] = intents
+    o_file = self.ddir + "u_" + i_file
+    df.to_csv( o_file, sep='|', index=False)
+    self.log(fname,2,"processed[%d] in [%d]ms with output file[%s]" % (cnt,self.mytk.get_time_passed('outer'),o_file))
+
+  def print_intent_spread(self,i_file,g_count_key='contentID'):
+    fname = 'print_intent_spread'
      
-    resp_obj = json.dumps(response, indent=2)
-    self.log(fname,1,resp_obj)
-    o_fd = open("./out/nlu.out",'a')
-    o_fd.write("##request[%s]##response[%s]\n" % (i_text,resp_obj))
-    o_fd.close()
-    
-    return resp_obj
+    self.log(fname,2,' call entry')
+
+    df = pd.read_csv( self.ddir + i_file, delimiter='|')
+    df.intent = df.intent.fillna('NA')
+    g_df = df[ \
+        #(df.status_code != 200) & \
+        (df[g_count_key] > 0) \
+            ] \
+        .groupby(['intent']) \
+        [g_count_key].count() \
+        .nlargest(1000) \
+        .reset_index(name='count') \
+        .sort_values(['count'],ascending=False)
+    print(g_df)
 
 if __name__ == '__main__':
-  print('NLU Tester')
-  text = "If you want to acheive success, billionaire technology entrepreneur and investor on ABC's \"Shark Tank\" Mark Cuban has some advice: always challenge yourself to absorb new information .\n\"Life-long learning is probably the greatest skill,\" he says on Arianna Huffington's The Thrive Global Podcast .\nCuban is an avid reader , and espouses the benefits of scouring books for ideas. Early in his career, reading up on the technology industry helped him get an edge on competitors.\n\"A guy with little computer background could compete with far more experienced guys, just because I put in the time to learn all I could,\" he writes on his blog. \"Everything I read was public. Anyone could buy the same books and magazines. The same information was available to anyone who wanted it. Turns out most people didn't want it.\"\nEven with a net worth of over $3 billion today, he's still reading.\nRecently, Cuban read a copy of \"Principles: Life and Work\" by Ray Dalio, the founder of Bridgewater Associates. Dalio's firm is the largest hedge fund in the world, and manages $160 billion.\nshow chapters Billionaire hedge fund founder Ray Dalio uses 'radical transparency' to deliver feedback—here's how it works 9:12 AM ET Wed, 13 Sept 2017 | 01:18 In \"Principles,\" Dalio explains step by step how he sought to create a culture of brutal honesty at Bridgewater, so the best ideas would rise to the top. The book explains the principles Dalio and all his employees follow, including \"evaluate accurately, not kindly,\" and \"don't hide your observations about people.\"\nCuban says the book would have been helpful to learn from as he was starting out.\nTweet\n\"It's the book I wish I had as a young entrepreneur, stressing over not knowing what I didn't know,\" Cuban tweeted on Dec. 31.\nMore importantly, Cuban says \"Principles\" gives instruction on how to develop the skill he values as critical to success: becoming a perpetual learner.\n\"'Principles' offers a bible to the greatest skill an entrepreneur can have, the ability to learn how to learn in any situation,\" Cuban writes. \"Read it.\"\nDon't miss: Mark Cuban: The 3 best tips to save more money in 2018\nshow chapters \"It scares the s*** out of me,\" billionaire Mark Cuban says of AI 1:37 PM ET Tue, 25 July 2017 | 00:59 Like this story? Like CNBC Make It on Facebook !"
-   
-  nlu = NLU()
-  nlu.invoke(text)
+  print('NLC/Assistant Tester')
+  text = "I want to change my phone number"
+  i_file = 'space_all_df.csv'
+  i_file = 'ner_processed_graph_df.csv'
+  nlc = NLC()
+  #nlc.invoke(text)
+  #nlc.batch_invoke('space_all_df.csv',)
+  #nlc.print_intent_spread(i_file=i_file,g_count_key='contentID')
+  nlc.batch_invoke( i_file=i_file, key='sent_id', value='text', rec_del='|')
+  nlc.print_intent_spread( i_file= 'u_' + i_file, g_count_key='sent_id')

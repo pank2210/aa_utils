@@ -37,7 +37,7 @@ class JiveCrawler:
 
     #Jive API access credentials. Normally user_id is service id made available from Jive
     self.userid = j_userid
-    #self.pwd = j_pwd
+    self.pwd = j_pwd
 
     #Preconfigure space_id used for pulling all child content. Has to be overrided by setter.
     self.p_doc_id = p_doc_id  # use 1414 for Account Management - Care
@@ -88,8 +88,7 @@ class JiveCrawler:
     resp = requests.get( req_url, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
     if resp.status_code == 200:
        #print("Response received.")
-       jdoc = json.loads(resp.text)
-       
+       jdoc = json.loads(resp.text)       
     else:
        print("Response to request url[%s] failed with status_code[%d]" % (req_url,resp.status_code))
        #print(resp.headers)
@@ -136,7 +135,7 @@ class JiveCrawler:
 
       return s
 
-  def check_access_to_doc_ids(self,i_file): 
+  def check_access_to_doc_ids(self,i_file,resp_dump=False): 
     jdoc = None
     #doc_ids=self.get_doc_ids()
     space_ids = []
@@ -150,6 +149,8 @@ class JiveCrawler:
 
     print("Processing check_access_to_doc_ids...")
     df = pd.read_csv( self.ddir + i_file)
+    #open file for response dump
+    resp_fd = open(self.ddir + 'doc_id_resp_dmup.txt','w')
     cols = ['m_pattern','m_sub_pattern','doc_id','doc_descr','usage','train_flag']
     #print(df.columns)
     df.columns = cols
@@ -191,6 +192,8 @@ class JiveCrawler:
           self.mytk.get_time_passed('inner')
           resp = requests.get( req_url1, auth=HTTPBasicAuth( self.userid, self.pwd), verify=self.verify)
           invoke_time.append(self.mytk.get_time_passed('inner'))
+          if resp_dump:
+              resp_fd.write(resp.text)
           status_codes.append( resp.status_code)
           jive_calls += 1
           if resp.status_code != 200:
@@ -202,6 +205,7 @@ class JiveCrawler:
       cnt += 1
       	
     #df['space_id'] = space_ids
+    resp_fd.close()
     df['status_code'] = status_codes
     print('Processed docs ',df.doc_id.count(),' status_codes count ',len(status_codes),' Jive calls ',jive_calls)
 
@@ -555,6 +559,7 @@ class JiveCrawler:
     for col in self.col_names:
       self.df[col] = self.df_dict[col]
     self.df.to_csv(self.ddir + self.output_df_fl,sep='|',index=False)
+    '''
     df_ids = self.df.id.unique()
     out = csv.writer(open(self.ddir + 'id_' + self.output_df_fl,"w"),delimiter=',')
     out.writerow(df_ids)
@@ -577,6 +582,7 @@ class JiveCrawler:
     out = csv.writer(open(self.ddir + 'sample_id_' + self.output_df_fl,"w"),delimiter=',')
     out.writerow(sample_ids)
     #print(self.df.head())
+    '''
     
   #fd = open("sample.json","w")
   #fd.write(resp.text)
@@ -586,13 +592,15 @@ class JiveCrawler:
 if __name__ == "__main__":
    print("Main started....")
 
-   jc = JiveCrawler(target_env='iconnect')
+   jc = JiveCrawler(j_pwd='XX_pass_XX',target_env='iconnect')
    #jc.get_placeids_from_spaceids()
-   placeSet = jc.process_spaces_with_appids()
    #print(placeSet)
-   #doc_df = jc.check_access_to_doc_ids('aa_jive_doc_list_review_phase1_0421.csv')
+   #doc_df = jc.check_access_to_doc_ids('test.csv',resp_dump=True)
    #placeSet=jc.get_parent_ids()
    #jc.set_p_doc_id(p_doc_id=['4781','13317','13404'])
+   #'''
+   placeSet = jc.process_spaces_with_appids()
    jc.set_p_doc_id(p_doc_id=list(placeSet))
    jc.crawl(next_link=True)
    jc.generate_output()
+   #'''
