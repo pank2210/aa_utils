@@ -44,8 +44,7 @@ class JiveCrawler:
 
     #Static output files for wrinting results.
     self.output_df_fl = 'space_all_df.csv'
-    #col_names = ['id','name','subject','type','contentID','html_ref','Parent']
-    self.col_names = ['id','name','subject','type','contentID','html_ref']
+    self.col_names = ['id','space_id','status','type','contentID','name','subject','html_ref']
     self.df = pd.DataFrame(columns=self.col_names)
     self.df_dict = {}
     for col in self.col_names: 
@@ -300,6 +299,20 @@ class JiveCrawler:
 
     return (set(space_ids)-{'00000'})
 
+  def get_spaceids_from_df(self,i_file='a9_jive_space_id_access_list_20190512.csv',key='space_appid',filter_key='space_access'): 
+    df = None
+
+    print("Processing spaceids from [%s]..." % (i_file))
+    df = pd.read_csv( self.ddir + i_file,encoding="ISO-8859-1")
+    print("rec's[%d] loaded" % (df[key].count()))
+    df = df[(df[filter_key] == 'y')]
+    print("rec's[%d] after filter" % (df[key].count()))
+    space_ids = df[key].unique()
+    print("unique space_id's [%d]" % (len(space_ids)))
+    #print(type(space_ids))
+
+    return space_ids
+
   def process_spaces_with_appids(self,i_file='a9_jive_space_id_access_list_20190512.csv'): 
     jdoc = None
     spaceids_url = self.s_url #'https://%s.sprint.com/api/core/v3/places/%d'
@@ -466,7 +479,7 @@ class JiveCrawler:
     return (set(space_ids)-{'00000'})
     
 
-  def get_child_contents(self,jdoc):
+  def get_child_contents(self,jdoc,space_id=0):
     #jdoc = json.loads(resp.text)
     #list/resources/parentPlace
     print("*****Data collected so far [%d]" % (len(self.df_dict[self.col_names[0]])))    
@@ -476,11 +489,13 @@ class JiveCrawler:
       #print(item['id'],item['subject'])
       
       my_dict[self.col_names[0]] = item['id']
-      my_dict[self.col_names[1]] = item['parentPlace']['name']
-      my_dict[self.col_names[2]] = item['subject']
+      my_dict[self.col_names[1]] = space_id
+      my_dict[self.col_names[2]] = item['status']
       my_dict[self.col_names[3]] = item['type']
       my_dict[self.col_names[4]] = item['contentID']
-      my_dict[self.col_names[5]] = item['resources']['html']['ref']
+      my_dict[self.col_names[5]] = item['parentPlace']['name']
+      my_dict[self.col_names[6]] = item['subject']
+      my_dict[self.col_names[7]] = item['resources']['html']['ref']
       #my_dict[self.col_names[6]] = item['parent']
       
       for col in self.col_names:
@@ -499,20 +514,27 @@ class JiveCrawler:
     #print(c_list)    
     return place_list
 
-  def crawl(self,next_link=True): 
+  def crawl(self,next_link=True,dump_flag=False): 
     p_doc_id = self.p_doc_id
+    spaceid_dict = {}
 
     if type(p_doc_id) is list:
       for doc_id in p_doc_id:
         try:
-          self.crawl_url(doc_id,next_link)
+          if doc_id in spaceid_dict: #avoid duplicate space_id
+            print("duplicate space_id[%s]" % doc_id)
+            continue
+          else:
+            self.crawl_url(doc_id,next_link,dump_flag)
+            spaceid_dict[doc_id] = 1
         except:
           pass
     else:
-        self.crawl(p_doc_id,next_link)
+        self.crawl_url(p_doc_id,next_link,dump_flag)
 
-  def crawl_url(self,doc_id,next_link=True): 
+  def crawl_url(self,doc_id,next_link=True,dump_flag=False): 
     url = self.p_url
+    o_fd = open(self.ddir + 'jdoc_dump.txt','w')
 
     req_url = url % (self.target_env,doc_id)     
     #print("Parent doc_id[%s], connecting to url[%s] for crawl..." % (doc_id,req_url)) 
@@ -533,7 +555,7 @@ class JiveCrawler:
         self.err_df_dict[col] = arr
       #exit(-10)
     else:
-      self.get_child_contents(jdoc)
+      self.get_child_contents(jdoc,doc_id)
       #next_link = True
       if 'links' in jdoc:
         while next_link:
@@ -544,12 +566,15 @@ class JiveCrawler:
             req_url = jdoc['links']['next']
             #print("Traversing next link [%s]" % (req_url))
             status_code,jdoc = self.get_response(req_url)
-            self.get_child_contents(jdoc)
+            if dump_flag:
+              o_fd.write(json.dumps(jdoc,indent=4) + '\n')
+            self.get_child_contents(jdoc,doc_id)
             if status_code != 200:
               print("http get for [%s] failed with status_code[%d]. Exiting untill error is fixed." % (req_url,status_code))
               next_link = False
       else:
         print("No Traversing required as links tag is absent")
+    close(o_fd)
       
   def generate_output(self):
     #build output dataframe
@@ -583,6 +608,22 @@ class JiveCrawler:
     out.writerow(sample_ids)
     #print(self.df.head())
     '''
+
+  def print_groups(self,i_file,g_count_key='id',g_keys=['type']):
+    fname = 'print_intent_spread'
+
+    df = pd.read_csv( self.ddir + i_file, delimiter='|')
+    #df.intent = df.intent.fillna('NA')
+    g_df = df[ \
+        #(df.status_code != 200) & \
+        (df[g_count_key] > 0) \
+            ] \
+        .groupby(g_keys) \
+        [g_count_key].count() \
+        .nlargest(1000) \
+        .reset_index(name='count') \
+        .sort_values(['count'],ascending=False)
+    print(g_df)
     
   #fd = open("sample.json","w")
   #fd.write(resp.text)
@@ -592,15 +633,17 @@ class JiveCrawler:
 if __name__ == "__main__":
    print("Main started....")
 
-   jc = JiveCrawler(j_pwd='XX_pass_XX',target_env='iconnect')
+   jc = JiveCrawler(j_pwd='',target_env='iconnect')
    #jc.get_placeids_from_spaceids()
    #print(placeSet)
    #doc_df = jc.check_access_to_doc_ids('test.csv',resp_dump=True)
    #placeSet=jc.get_parent_ids()
-   #jc.set_p_doc_id(p_doc_id=['4781','13317','13404'])
-   #'''
-   placeSet = jc.process_spaces_with_appids()
+   #jc.set_p_doc_id(p_doc_id=['1422'])
+   #placeSet = jc.process_spaces_with_appids()
+   '''
+   placeSet = jc.get_spaceids_from_df(i_file='a9_jive_space_id_access_list_20190512.csv',key='space_appid',filter_key='space_access')
    jc.set_p_doc_id(p_doc_id=list(placeSet))
-   jc.crawl(next_link=True)
+   jc.crawl(next_link=True,dump_flag=True)
    jc.generate_output()
-   #'''
+   '''
+   jc.print_groups( i_file='space_all_df.csv', g_count_key='id', g_keys=['status','type'])
